@@ -6,8 +6,8 @@ spring:
     name: sale-service
   datasource:
     url: jdbc:postgresql://ep-crimson-paper-ataoeczu-pooler.c-9.us-east-1.aws.neon.tech/neondb?sslmode=require&currentSchema=sale_schema
-    username: ${DB_USERNAME:neondb_owner}
-    password: ${DB_PASSWORD:npg_tbdKHk45vIMg}
+    username: neondb_owner
+    password: npg_tbdKHk45vIMg
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -58,11 +58,4 @@ springdoc:
     tags-sorter: alpha
     operations-sorter: alpha
 
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
-  endpoint:
-    health:
-      show-details: always
+
