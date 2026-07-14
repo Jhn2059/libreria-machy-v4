@@ -47,21 +47,28 @@
   .btn-gold{background:#F59E0B;color:#0D1F3C}.btn-gold:hover{background:#FCD34D}
   .btn-outline{background:transparent;color:rgba(255,255,255,.5);border:1.5px solid rgba(255,255,255,.15)}.btn-outline:hover{background:rgba(255,255,255,.06)}
   .btn-red{background:#DC2626;color:#fff}.btn-red:hover{background:#B91C1C}
+  .btn-green{background:#059669;color:#fff}.btn-green:hover{background:#059669}
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
+  .overlay-box{background:#0D1F3C;border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:24px;width:100%;max-width:340px;text-align:center}
+  .overlay-box .code-display{font-size:1.5rem;font-weight:700;color:#F59E0B;word-break:break-all;background:rgba(245,158,11,.1);padding:12px;border-radius:8px;margin:12px 0;border:1px solid rgba(245,158,11,.3)}
+  .overlay-box p{font-size:.9rem;color:rgba(255,255,255,.6);margin-bottom:4px}
+  .overlay-box .btn-row{display:flex;gap:10px;margin-top:16px}
+  .overlay-box .btn-row .btn{flex:1;margin-top:0}
 </style>
 </head>
 <body>
 <div class="hdr">
-  <h1>📷 Escáner remoto Machy</h1>
+  <h1> Escáner remoto Machy</h1>
   <p>Conectado a sesión: <strong id="session-display">—</strong></p>
 </div>
 <div class="body">
   <!-- PANTALLA PIN -->
   <div id="pin-screen" class="pin-screen">
-    <h2>🔐 Ingresa el PIN</h2>
+    <h2> Ingresa el PIN</h2>
     <p>Ingresa el código PIN de 4 dígitos que aparece en la pantalla de la PC</p>
-    <input type="text" id="pin-input" class="pin-input" maxlength="4" placeholder="••••" inputmode="numeric" pattern="[0-9]*"/>
+    <input type="text" id="pin-input" class="pin-input" maxlength="4" placeholder="****" inputmode="numeric" pattern="[0-9]*"/>
     <p class="pin-count" id="pin-attempts">3 intentos restantes</p>
-    <button class="btn btn-gold" id="btn-verify-pin" onclick="verifyPin()">🔐 Verificar PIN</button>
+    <button class="btn btn-gold" id="btn-verify-pin" onclick="verifyPin()"> Verificar PIN</button>
     <button class="btn btn-outline" onclick="history.back()">← Cancelar</button>
   </div>
   <!-- PANTALLA CÁMARA -->
@@ -73,23 +80,37 @@
       <p id="status-msg" class="anim-up">Iniciando cámara trasera…</p>
     </div>
     <p class="cam-count" id="cam-count">Códigos enviados: 0</p>
-    <button class="btn btn-red" id="btn-end-scan" onclick="endScan()">✅ Finalizar escaneo</button>
+    <button class="btn btn-red" id="btn-end-scan" onclick="endScan()"> Finalizar escaneo</button>
+  </div>
+  <!-- OVERLAY: CONFIRMAR CÓDIGO -->
+  <div id="confirm-overlay" class="overlay hidden">
+    <div class="overlay-box">
+      <div style="font-size:2.5rem;margin-bottom:8px"></div>
+      <p>Código escaneado</p>
+      <div class="code-display" id="confirm-code"></div>
+      <p style="margin-top:8px">¿Escanear otro producto?</p>
+      <div class="btn-row">
+        <button class="btn btn-green" id="btn-scan-another" onclick="scanAnother()"> Sí, escanear otro</button>
+        <button class="btn btn-red" id="btn-finish-scan" onclick="finishScan()"> No, finalizar</button>
+      </div>
+    </div>
   </div>
   <!-- PANTALLA FINALIZADO -->
   <div id="end-screen" class="hidden" style="text-align:center">
-    <div style="font-size:3rem;margin-bottom:12px">✅</div>
+    <div style="font-size:3rem;margin-bottom:12px"></div>
     <h2 style="font-size:1.2rem;margin-bottom:6px">Escaneo finalizado</h2>
     <p style="color:rgba(255,255,255,.5);font-size:.84rem">Se enviaron <strong id="final-count">0</strong> códigos. Puedes cerrar esta página.</p>
   </div>
-  <button class="btn btn-outline hidden" id="btn-retry" onclick="location.reload()">🔄 Reintentar</button>
+  <button class="btn btn-outline hidden" id="btn-retry" onclick="location.reload()"> Reintentar</button>
 </div>
-<div class="ftr">Librería Machy · SVM v3.0 · Escáner remoto</div>
+<div class="ftr">Librería Machy · SVM v4.0 · Escáner remoto</div>
 <script>
 let stompClient = null;
 let html5QR = null;
 let scanCount = 0;
 let sessionId = '';
 let wsConnected = false;
+let lastCode = '';
 
 function getSessionId() {
   const p = new URLSearchParams(window.location.search);
@@ -101,6 +122,8 @@ function setStatus(msg, type) {
   el.textContent = msg;
   el.className = type || '';
 }
+
+function $(id) { return document.getElementById(id); }
 
 function connectWebSocket() {
   return new Promise((resolve, reject) => {
@@ -125,48 +148,41 @@ function subscribeToSession() {
     try {
       stompClient.subscribe('/topic/scan.' + sessionId, msg => {
         const data = JSON.parse(msg.body);
-        if (data.type === 'AUTH_OK') {
-          resolve(true);
-        } else if (data.type === 'AUTH_FAIL') {
-          resolve(false);
-        }
+        if (data.type === 'AUTH_OK') resolve(true);
+        else if (data.type === 'AUTH_FAIL') resolve(false);
       });
     } catch(e) { reject(e); }
   });
 }
 
 async function verifyPin() {
-  const pin = document.getElementById('pin-input').value.trim();
+  const pin = $('pin-input').value.trim();
   if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-    document.getElementById('pin-input').style.borderColor = '#F87171';
+    $('pin-input').style.borderColor = '#F87171';
     return;
   }
-  const btn = document.getElementById('btn-verify-pin');
+  const btn = $('btn-verify-pin');
   btn.disabled = true;
-  btn.textContent = '⏳ Verificando…';
+  btn.textContent = ' Verificando…';
   try {
     await connectWebSocket();
     const authPromise = subscribeToSession();
     stompClient.send('/app/scan.join.' + sessionId, {}, JSON.stringify({ type: 'PIN', code: pin }));
     const authResult = await authPromise;
     if (authResult) {
-      document.getElementById('pin-screen').classList.add('hidden');
-      document.getElementById('cam-screen').classList.remove('hidden');
+      $('pin-screen').classList.add('hidden');
+      $('cam-screen').classList.remove('hidden');
       startCamera();
     } else {
-      const remaining = parseInt(document.getElementById('pin-attempts').textContent) - 1 || 2;
-      document.getElementById('pin-attempts').textContent = remaining + ' intentos restantes';
-      document.getElementById('pin-input').style.borderColor = '#F87171';
-      document.getElementById('pin-input').value = '';
+      const rem = parseInt($('pin-attempts').textContent) - 1 || 2;
+      $('pin-attempts').textContent = rem + ' intentos restantes';
+      $('pin-input').style.borderColor = '#F87171';
+      $('pin-input').value = '';
       btn.disabled = false;
-      btn.textContent = '🔐 Verificar PIN';
-      if (remaining <= 0) {
-        document.getElementById('pin-attempts').textContent = '❌ PIN bloqueado. Vuelve a escanear el QR.';
-        btn.disabled = true;
-      }
+      btn.textContent = ' Verificar PIN';
+      if (rem <= 0) { $('pin-attempts').textContent = ' PIN bloqueado. Vuelve a escanear el QR.'; btn.disabled = true; }
     }
   } catch(e) {
-    // Fallback a REST
     try {
       const res = await fetch('/api/scan/session/' + sessionId + '/verify-pin', {
         method: 'POST',
@@ -176,29 +192,29 @@ async function verifyPin() {
       const json = await res.json();
       if (json.success && json.data?.authenticated) {
         wsConnected = false;
-        document.getElementById('pin-screen').classList.add('hidden');
-        document.getElementById('cam-screen').classList.remove('hidden');
+        $('pin-screen').classList.add('hidden');
+        $('cam-screen').classList.remove('hidden');
         startCamera();
       } else {
-        const remaining = parseInt(document.getElementById('pin-attempts').textContent) - 1 || 2;
-        document.getElementById('pin-attempts').textContent = remaining + ' intentos restantes';
-        document.getElementById('pin-input').style.borderColor = '#F87171';
-        document.getElementById('pin-input').value = '';
+        const rem = parseInt($('pin-attempts').textContent) - 1 || 2;
+        $('pin-attempts').textContent = rem + ' intentos restantes';
+        $('pin-input').style.borderColor = '#F87171';
+        $('pin-input').value = '';
         btn.disabled = false;
-        btn.textContent = '🔐 Verificar PIN';
-        if (remaining <= 0) { document.getElementById('pin-attempts').textContent = '❌ PIN bloqueado. Vuelve a escanear el QR.'; btn.disabled = true; }
+        btn.textContent = ' Verificar PIN';
+        if (rem <= 0) { $('pin-attempts').textContent = ' PIN bloqueado. Vuelve a escanear el QR.'; btn.disabled = true; }
       }
     } catch(e2) {
       btn.disabled = false;
-      btn.textContent = '🔐 Verificar PIN';
-      setStatus('❌ Error de conexión', 'err');
+      btn.textContent = ' Verificar PIN';
+      setStatus(' Error de conexión', 'err');
     }
   }
 }
 
 async function sendCode(code) {
   scanCount++;
-  document.getElementById('cam-count').textContent = 'Códigos enviados: ' + scanCount;
+  $('cam-count').textContent = 'Códigos enviados: ' + scanCount;
   try {
     if (wsConnected && stompClient?.connected) {
       stompClient.send('/app/scan.code.' + sessionId, {}, JSON.stringify({ code }));
@@ -214,33 +230,53 @@ async function sendCode(code) {
   }
 }
 
+function onCodeDetected(code) {
+  if (!code || code === lastCode) return;
+  lastCode = code;
+  if (html5QR) { try { html5QR.stop(); } catch(e) {} }
+  sendCode(code);
+  $('confirm-code').textContent = code;
+  $('confirm-overlay').classList.remove('hidden');
+}
+
+function scanAnother() {
+  $('confirm-overlay').classList.add('hidden');
+  startCamera();
+}
+
+function finishScan() {
+  $('confirm-overlay').classList.add('hidden');
+  endScan();
+}
+
 function startCamera() {
   setStatus('Solicitando acceso a la cámara trasera…');
+  if (html5QR) { try { html5QR.stop(); } catch(e) {} }
   html5QR = new Html5Qrcode('reader');
   const config = { fps: 15, qrbox: { width: 170, height: 170 }, aspectRatio: 1.0 };
-  const onSuccess = code => { sendCode(code); };
+  const onSuccess = code => { onCodeDetected(code); };
   const onError = () => {};
   html5QR.start({ facingMode: 'environment' }, config, onSuccess, onError)
-    .then(() => setStatus('📷 Cámara activa. Escanea los códigos de barras.'))
+    .then(() => setStatus(' Cámara activa. Apunta al código de barras.'))
     .catch(() => {
       Html5Qrcode.getCameras()
         .then(cams => {
           if (!cams.length) {
             setStatus('No se encontró cámara.', 'err');
-            document.getElementById('btn-retry').classList.remove('hidden');
+            $('btn-retry').classList.remove('hidden');
             return;
           }
           const cam = (cams.find(c => /environment|back|trasera|rear/i.test(c.label)) || cams[cams.length - 1] || cams[0]).id;
           html5QR.start(cam, config, onSuccess, onError)
-            .then(() => setStatus('📷 Cámara activa. Escanea los códigos de barras.'))
+            .then(() => setStatus(' Cámara activa. Apunta al código de barras.'))
             .catch(e => {
-              setStatus('❌ Error de cámara: ' + e, 'err');
-              document.getElementById('btn-retry').classList.remove('hidden');
+              setStatus(' Error de cámara: ' + e, 'err');
+              $('btn-retry').classList.remove('hidden');
             });
         })
         .catch(e => {
-          setStatus('❌ Error: ' + e, 'err');
-          document.getElementById('btn-retry').classList.remove('hidden');
+          setStatus(' Error: ' + e, 'err');
+          $('btn-retry').classList.remove('hidden');
         });
     });
 }
@@ -248,18 +284,18 @@ function startCamera() {
 function endScan() {
   if (html5QR) { try { html5QR.stop(); } catch(e) {} html5QR = null; }
   if (stompClient) { try { stompClient.disconnect(); } catch(e) {} stompClient = null; }
-  document.getElementById('cam-screen').classList.add('hidden');
-  document.getElementById('final-count').textContent = scanCount;
-  document.getElementById('end-screen').classList.remove('hidden');
+  $('cam-screen').classList.add('hidden');
+  $('final-count').textContent = scanCount;
+  $('end-screen').classList.remove('hidden');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   sessionId = getSessionId();
   if (!sessionId || sessionId.length < 4) {
-    document.getElementById('pin-screen').innerHTML = '<h2>❌ Sesión inválida</h2><p>Escanea el código QR desde la PC.</p>';
+    $('pin-screen').innerHTML = '<h2> Sesión inválida</h2><p>Escanea el código QR desde la PC.</p>';
     return;
   }
-  document.getElementById('session-display').textContent = sessionId;
+  $('session-display').textContent = sessionId;
 });
 </script>
 </body>
