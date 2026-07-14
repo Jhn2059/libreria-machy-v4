@@ -18,11 +18,13 @@ public class ScanController {
 
     @PostMapping("/session")
     public ResponseEntity<Map<String, Object>> createSession(
-            @RequestHeader(value = "Host", required = false) String host) {
+            @RequestHeader(value = "Host", required = false) String host,
+            @RequestHeader(value = "X-Forwarded-Proto", required = false) String forwardedProto) {
         String sessionId = scanService.createSession();
         String pin = scanService.getPin(sessionId);
 
-        String baseUrl = "http://" + (host != null ? host : "localhost:8080");
+        String protocol = "https".equals(forwardedProto) ? "https" : "http";
+        String baseUrl = protocol + "://" + (host != null ? host : "localhost:8080");
         String scanUrl = baseUrl + "/remote-scan.html?session=" + sessionId;
         String qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=" +
                 java.net.URLEncoder.encode(scanUrl, java.nio.charset.StandardCharsets.UTF_8);

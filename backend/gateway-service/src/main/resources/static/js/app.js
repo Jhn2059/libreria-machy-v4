@@ -293,7 +293,22 @@ async function loadAll() {
       }
     } catch(e) { console.warn('Error cargando productos:', e.message); }
     try { const sales = extractItems(await api.getSales());
-      if (sales.length) VENTAS = sales;
+      if (sales.length) VENTAS = sales.map(v => ({
+        id: v.id, numero: v.numero, num_comp: v.numComp || v.numero,
+        vendedor_id: v.vendedorId, vendedor: v.vendedorNombre || '—',
+        items: (v.items || []).map(it => ({
+          id: it.id, producto_id: it.productoId, codigo: it.codigo,
+          nombre: it.nombreProducto, nombre_producto: it.nombreProducto,
+          categoria: it.categoria, cantidad: it.cantidad, qty: it.cantidad,
+          precio_unitario: it.precioUnitario, precio_venta: it.precioUnitario,
+          subtotal: it.subtotal
+        })),
+        cliente: v.cliente, cliente_dni: v.clienteDni || '',
+        subtotal: v.subtotal, descuento: v.descuento, total: v.total, igv: v.igv,
+        paga_con: v.pagaCon, vuelto: v.vuelto,
+        estado: v.estado, boleta: v.boleta, boleta_generada: v.boletaGenerada,
+        motivo: v.motivoAnulacion || '', created_at: v.createdAt, fecha: v.createdAt
+      }));
     } catch(e) { console.warn('Error cargando ventas:', e.message); }
     try { const users = extractItems(await api.getUsers());
       if (users.length) USERS = users;
