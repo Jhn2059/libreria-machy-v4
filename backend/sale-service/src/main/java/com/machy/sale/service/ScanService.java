@@ -17,7 +17,7 @@ public class ScanService {
 
     private static final Logger log = LoggerFactory.getLogger(ScanService.class);
 
-    private final Map<String, SessionInfo> sessions;
+    private final Map<String, SessionEntry> sessions;
     private final long sessionTtlMs;
     private final int maxSessions;
 
@@ -41,28 +41,28 @@ public class ScanService {
         }
         String sessionId = generateSessionId();
         String pin = String.format("%04d", (int) (Math.random() * 9000 + 1000));
-        sessions.put(sessionId, new SessionInfo(pin, Instant.now()));
+        sessions.put(sessionId, new SessionEntry(pin, Instant.now()));
         log.info("Session created: {} (total: {})", sessionId, sessions.size());
         return sessionId;
     }
 
     public String getPin(String sessionId) {
-        SessionInfo info = sessions.get(sessionId);
-        return info != null ? info.pin() : null;
+        SessionEntry entry = sessions.get(sessionId);
+        return entry != null ? entry.pin : null;
     }
 
     public boolean verifyPin(String sessionId, String pin) {
-        SessionInfo info = sessions.get(sessionId);
-        if (info != null && info.pin().equals(pin)) {
-            sessions.put(sessionId, info.withAuthenticated());
+        SessionEntry entry = sessions.get(sessionId);
+        if (entry != null && entry.pin.equals(pin)) {
+            sessions.put(sessionId, new SessionEntry(entry.pin, entry.createdAt, true));
             return true;
         }
         return false;
     }
 
     public boolean isAuthenticated(String sessionId) {
-        SessionInfo info = sessions.get(sessionId);
-        return info != null && info.authenticated();
+        SessionEntry entry = sessions.get(sessionId);
+        return entry != null && entry.authenticated;
     }
 
     public void endSession(String sessionId) {
@@ -74,10 +74,10 @@ public class ScanService {
     public void purgeExpired() {
         int before = sessions.size();
         Instant cutoff = Instant.now().minusMillis(sessionTtlMs);
-        Iterator<Map.Entry<String, SessionInfo>> it = sessions.entrySet().iterator();
+        Iterator<Map.Entry<String, SessionEntry>> it = sessions.entrySet().iterator();
         while (it.hasNext()) {
-            Map.Entry<String, SessionInfo> entry = it.next();
-            if (entry.getValue().createdAt().isBefore(cutoff)) {
+            Map.Entry<String, SessionEntry> entry = it.next();
+            if (entry.getValue().createdAt.isBefore(cutoff)) {
                 it.remove();
             }
         }
@@ -96,12 +96,19 @@ public class ScanService {
         return sb.toString();
     }
 
-    private record SessionInfo(String pin, Instant createdAt, boolean authenticated) {
-        SessionInfo(String pin, Instant createdAt) {
+    private static class SessionEntry {
+        final String pin;
+        final Instant createdAt;
+        final boolean authenticated;
+
+        SessionEntry(String pin, Instant createdAt) {
             this(pin, createdAt, false);
         }
-        SessionInfo withAuthenticated() {
-            return new SessionInfo(pin, createdAt, true);
+
+        SessionEntry(String pin, Instant createdAt, boolean authenticated) {
+            this.pin = pin;
+            this.createdAt = createdAt;
+            this.authenticated = authenticated;
         }
     }
 }
